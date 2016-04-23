@@ -32,7 +32,7 @@
 #include "tssplitter_lite.h"
 
 /* prototypes */
-int tune(char *channel, thread_data *tdata, int dev_num);
+int tune(char *channel, thread_data *tdata, int dev_num, unsigned int tsid);
 int close_tuner(thread_data *tdata);
 
 void
@@ -158,7 +158,7 @@ main(int argc, char **argv)
     init_signal_handlers(&signal_thread, &tdata);
 
     /* tune */
-    if(tune(argv[optind], &tdata, dev_num) != 0)
+    if(tune(argv[optind], &tdata, dev_num, 0) != 0)
         return 1;
 
     while(1) {

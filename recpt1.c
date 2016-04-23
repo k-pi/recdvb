@@ -45,6 +45,48 @@
 /* globals */
 extern boolean f_exit;
 
+#define NUM_PRESET_CH 41
+struct {
+	int lch;
+	char *channel;
+	int tsid;
+} preset_ch[NUM_PRESET_CH] = {
+	{ 101, "bs15", 0x40f1 }, { 103, "bs15", 0x40f2 },
+	{ 141, "bs13", 0x40d0 }, { 151, "bs01", 0x4010 },
+	{ 161, "bs01", 0x4011 }, { 171, "bs03", 0x4031 },
+	{ 181, "bs13", 0x40d1 }, { 191, "bs03", 0x4030 },
+	{ 192, "bs05", 0x4450 }, { 193, "bs05", 0x4451 },
+	{ 200, "bs09", 0x4091 }, { 201, "bs07", 0x4470 },
+	{ 202, "bs07", 0x4470 }, { 211, "bs09", 0x4490 },
+	{ 222, "bs09", 0x4092 }, { 231, "bs11", 0x46b2 },
+	{ 232, "bs11", 0x46b2 }, { 233, "bs11", 0x46b2 },
+	{ 234, "bs19", 0x4730 }, { 236, "bs07", 0x4671 },
+	{ 238, "bs11", 0x46b0 }, { 241, "bs11", 0x46b1 },
+	{ 242, "bs19", 0x4731 }, { 243, "bs19", 0x4732 },
+	{ 244, "bs21", 0x4751 }, { 245, "bs21", 0x4752 },
+	{ 251, "bs23", 0x4770 }, { 252, "bs21", 0x4750 },
+	{ 255, "bs23", 0x4771 }, { 256, "bs07", 0x4672 },
+	{ 258, "bs23", 0x4772 }, { 291, "bs17", 0x4310 },
+	{ 292, "bs17", 0x4310 }, { 294, "bs17", 0x4311 },
+	{ 295, "bs17", 0x4311 }, { 296, "bs17", 0x4311 },
+	{ 297, "bs17", 0x4311 }, { 298, "bs17", 0x4310 },
+	{ 531, "bs11", 0x46b2 }, { 910, "bs15", 0x40f2 },
+	{ 929, "bs15", 0x40f1 }
+};
+
+void set_lch(char *lch, char **ppch, char **sid, unsigned int *tsid)
+{
+	int i, ch;
+	ch = atoi(lch);
+	for (i = 0; i < NUM_PRESET_CH; i++)
+		if (preset_ch[i].lch == ch) break;
+	if (i < NUM_PRESET_CH ) {
+		*ppch = preset_ch[i].channel;
+		if (*tsid == 0) *tsid = preset_ch[i].tsid;
+		if (*sid == NULL) *sid = lch;
+	}
+}
+
 
 //read 1st line from socket
 void read_line(int socket, char *p){
@@ -77,13 +119,14 @@ mq_recv(void *t)
     char channel[16];
 	char service_id[32] = {0};
     int recsec = 0, time_to_add = 0;
+    unsigned int tsid = 0;
 
     while(1) {
         if(msgrcv(tdata->msqid, &rbuf, MSGSZ, 1, 0) < 0) {
             return NULL;
         }
 
-		sscanf(rbuf.mtext, "ch=%s t=%d e=%d sid=%s", channel, &recsec, &time_to_add, service_id);
+		sscanf(rbuf.mtext, "ch=%s t=%d e=%d sid=%s tsid=%d", channel, &recsec, &time_to_add, service_id, &tsid);
 
 
             /* wait for remainder */
@@ -93,7 +136,7 @@ mq_recv(void *t)
 //            if(close_tuner(tdata) != 0)
 //                return NULL;
 
-            tune(channel, tdata, 0);
+            tune(channel, tdata, 0, tsid);
 
         if(time_to_add) {
             tdata->recsec += time_to_add;
@@ -471,12 +514,13 @@ void
 show_usage(char *cmd)
 {
 #ifdef HAVE_LIBARIB25
-    fprintf(stderr, "Usage: \n%s [--b25 [--round N] [--strip] [--EMM]] [--udp [--addr hostname --port portnumber]] [--http portnumber] [--dev devicenumber] [--lnb voltage] [--sid SID1,SID2] channel rectime destfile\n", cmd);
+    fprintf(stderr, "Usage: \n%s [--b25 [--round N] [--strip] [--EMM]] [--udp [--addr hostname --port portnumber]] [--http portnumber] [--dev devicenumber] [--lnb voltage] [--sid SID1,SID2] [--tsid TSID] [--lch] channel rectime destfile\n", cmd);
 #else
-    fprintf(stderr, "Usage: \n%s [--strip] [--EMM]] [--udp [--addr hostname --port portnumber]] [--dev devicenumber] [--lnb voltage] [--sid SID1,SID2] channel rectime destfile\n", cmd);
+    fprintf(stderr, "Usage: \n%s [--udp [--addr hostname --port portnumber]] [--http portnumber] [--dev devicenumber] [--lnb voltage] [--sid SID1,SID2] [--tsid TSID] [--lch] channel rectime destfile\n", cmd);
 #endif
     fprintf(stderr, "\n");
     fprintf(stderr, "Remarks:\n");
+    fprintf(stderr, "if channel begins with 'bs##' or 'nd##', means BS/CS channel, '##' is numeric.\n");
     fprintf(stderr, "if rectime  is '-', records indefinitely.\n");
     fprintf(stderr, "if destfile is '-', stdout is used for output.\n");
 }
@@ -498,6 +542,8 @@ show_options(void)
     fprintf(stderr, "--dev N:             Use DVB device /dev/dvb/adapterN\n");
     fprintf(stderr, "--lnb voltage:       Specify LNB voltage (0, 11, 15)\n");
     fprintf(stderr, "--sid SID1,SID2,...: Specify SID number in CSV format (101,102,...)\n");
+    fprintf(stderr, "--tsid TSID:         Specify TSID in decimal or hex, hex begins '0x'\n");
+    fprintf(stderr, "--lch:               Specify channel as BS/CS logical channel instead of physical one\n");
     fprintf(stderr, "--help:              Show this help\n");
     fprintf(stderr, "--version:           Show version\n");
 }
@@ -616,6 +662,8 @@ main(int argc, char **argv)
         { "help",      0, NULL, 'h'},
         { "version",   0, NULL, 'v'},
         { "sid",       1, NULL, 'i'},
+        { "tsid",      1, NULL, 't'},
+        { "lch",       0, NULL, 'c'},
         {0, 0, NULL, 0} /* terminate */
     };
 
@@ -625,6 +673,7 @@ main(int argc, char **argv)
     boolean fileless = FALSE;
     boolean use_stdout = FALSE;
     boolean use_splitter = FALSE;
+    boolean use_lch = FALSE;
     char *host_to = NULL;
     int port_to = 1234;
     int port_http = 12345;
@@ -633,11 +682,12 @@ main(int argc, char **argv)
     int val;
     char *voltage[] = {"0V", "11V", "15V"};
     char *sid_list = NULL;
+    unsigned int tsid = 0;
 	int connected_socket, listening_socket;
 	unsigned int len;
-	char *channel;
+	char *channel, *pch = NULL;
 
-    while((result = getopt_long(argc, argv, "br:smn:ua:H:p:d:hvli:",
+    while((result = getopt_long(argc, argv, "br:smn:ua:H:p:d:hvitcl:",
                                 long_options, &option_index)) != -1) {
         switch(result) {
         case 'b':
@@ -712,6 +762,18 @@ main(int argc, char **argv)
             use_splitter = TRUE;
             sid_list = optarg;
             break;
+        case 't':
+            tsid = atoi(optarg);
+            if(strlen(optarg) > 2){
+                if((optarg[0] == '0') && ((optarg[1] == 'X') ||(optarg[1] == 'x'))){
+                    sscanf(optarg+2, "%x", &tsid);
+                }
+            }
+            fprintf(stderr, "tsid = 0x%x\n", tsid);
+            break;
+	case 'c':
+	    use_lch = TRUE;
+	    break;
         }
     }
 
@@ -769,7 +831,7 @@ if(use_http){	// http-server add-
             tdata.wfd = -1;
         }
         else {
-            fprintf(stderr, "Arguments are necessary!\n");
+            fprintf(stderr, "Some required parameters are missing!\n");
             fprintf(stderr, "Try '%s --help' for more information.\n", argv[0]);
             return 1;
         }
@@ -777,8 +839,15 @@ if(use_http){	// http-server add-
 
     fprintf(stderr, "pid = %d\n", getpid());
 
+    if(use_lch){
+        set_lch(argv[optind], &pch, &sid_list, &tsid);
+        if(sid_list) use_splitter = TRUE;
+        fprintf(stderr, "tsid = 0x%x\n", tsid);
+    }
+    if(pch == NULL) pch = argv[optind];
+
     /* tune */
-    if(tune(argv[optind], &tdata, dev_num) != 0)
+    if(tune(pch, &tdata, dev_num, tsid) != 0)
         return 1;
 
     /* set recsec */
@@ -828,6 +897,8 @@ while(1){	// http-server add-
 	if(use_http){
 		struct hostent *peer_host;
 		struct sockaddr_in peer_sin;
+		pch = NULL;
+		sid_list = NULL;
 
 		len = sizeof(peer_sin);
 
@@ -856,6 +927,9 @@ while(1){	// http-server add-
 		char *sidflg = strtok(NULL,delim);
 		if(sidflg)
 			sid_list = sidflg;
+		if(use_lch)
+			set_lch(channel, &pch, &sid_list, &tsid);
+		if(pch == NULL) pch = channel;
 		fprintf(stderr,"channel is %s\n",channel);
 
 		if(sid_list == NULL){
@@ -893,7 +967,7 @@ while(1){	// http-server add-
 		tdata.wfd = connected_socket;
 
 		//tune
-		if(tune(channel, &tdata, dev_num) != 0){
+		if(tune(pch, &tdata, dev_num, tsid) != 0){
 			fprintf(stderr, "Tuner cannot start recording\n");
 			continue;
 		}
