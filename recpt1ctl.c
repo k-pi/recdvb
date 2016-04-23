@@ -14,7 +14,7 @@
 void
 show_usage(char *cmd)
 {
-    fprintf(stderr, "Usage: \n%s --pid pid [--channel channel] [--sid SID1,SID2] [--extend time_to_extend] [--time recording_time]\n", cmd);
+    fprintf(stderr, "Usage: \n%s --pid pid [--channel channel] [--sid SID1,SID2] [--tsid TSID] [--extend time_to_extend] [--time recording_time]\n", cmd);
     fprintf(stderr, "\n");
 }
 
@@ -24,7 +24,8 @@ show_options(void)
     fprintf(stderr, "Options:\n");
     fprintf(stderr, "--pid:               Process id of recdvb to control\n");
     fprintf(stderr, "--channel:           Tune to specified channel\n");
-	fprintf(stderr, "--sid SID1,SID2,...: Specify SID number in CSV format (101,102,...)\n");
+    fprintf(stderr, "--sid SID1,SID2,...: Specify SID number in CSV format (101,102,...)\n");
+    fprintf(stderr, "--tsid TSID:         Specify TSID in decimal or hex, hex begins '0x'\n");
     fprintf(stderr, "--extend:            Extend recording time\n");
     fprintf(stderr, "--time:              Set total recording time\n");
     fprintf(stderr, "--help:              Show this help\n");
@@ -45,10 +46,12 @@ main(int argc, char **argv)
 
     int result;
     int option_index;
+    unsigned int tsid = 0;
     struct option long_options[] = {
         { "pid",       1, NULL, 'p'},
         { "channel",   1, NULL, 'c'},
-		{ "sid",	   1, NULL, 'i'},
+	{ "sid",       1, NULL, 'i'},
+	{ "tsid",      1, NULL, 's'},
         { "extend",    1, NULL, 'e'},
         { "time",      1, NULL, 't'},
         { "help",      0, NULL, 'h'},
@@ -56,7 +59,7 @@ main(int argc, char **argv)
         {0, 0, NULL, 0} /* terminate */
     };
 
-    while((result = getopt_long(argc, argv, "p:c:i:e:t:hvl",
+    while((result = getopt_long(argc, argv, "p:c:i:s:e:t:hvl",
                                 long_options, &option_index)) != -1) {
         switch(result) {
         case 'h':
@@ -89,15 +92,22 @@ main(int argc, char **argv)
             parse_time(optarg, &recsec);
             fprintf(stderr, "Total recording time = %d sec\n", recsec);
             break;
-		case 'i':
-			sid_list = optarg;
+        case 'i':
+            sid_list = optarg;
             fprintf(stderr, "Service ID = %s\n", sid_list);
-			break;
+            break;
+        case 's':
+            tsid = atoi(optarg);
+            if(strlen(optarg) > 2)
+                if((optarg[0] == '0') && ((optarg[1] == 'X') || (optarg[1] == 'x')))
+                    sscanf(optarg+2, "%x", &tsid);
+            fprintf(stderr, "tsid = 0x%x\n", tsid);
+            break;
         }
     }
 
     if(!key) {
-        fprintf(stderr, "Arguments are necessary!\n");
+        fprintf(stderr, "Some required parameters are missing!\n");
         fprintf(stderr, "Try '%s --help' for more information.\n", argv[0]);
         exit(1);
     }
@@ -108,7 +118,7 @@ main(int argc, char **argv)
     }
 
     sbuf.mtype = 1;
-    sprintf(sbuf.mtext, "ch=%s t=%d e=%d sid=%s", channel, recsec, extsec, sid_list);
+    sprintf(sbuf.mtext, "ch=%s t=%d e=%d sid=%s tsid=%d", channel, recsec, extsec, sid_list, tsid);
 
     buf_length = strlen(sbuf.mtext) + 1 ;
 

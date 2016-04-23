@@ -83,7 +83,7 @@ extern char *isdb_t_dev[];
 extern boolean f_exit;
 
 /* prototypes */
-int tune(char *channel, thread_data *tdata, int dev_num);
+int tune(char *channel, thread_data *tdata, int dev_num, unsigned int tsid);
 int close_tuner(thread_data *tdata);
 void calc_cn(void);
 int parse_time(char *rectimestr, int *recsec);

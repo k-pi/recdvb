@@ -125,7 +125,7 @@ do_bell(int bell)
 
 /* from checksignal.c */
 int
-tune(char *channel, thread_data *tdata, int dev_num)
+tune(char *channel, thread_data *tdata, int dev_num, unsigned int tsid)
 {
     struct dtv_property prop[3];
     struct dtv_properties props;
@@ -152,25 +152,45 @@ tune(char *channel, thread_data *tdata, int dev_num)
       fprintf(stderr, "FE_GET_INFO failed\n");
       return 1;
     }
-    if(fe_info.type != FE_OFDM){
-      fprintf(stderr, "type is not FE_OFDM\n");
+    if((fe_info.type != FE_OFDM)&&(fe_info.type != FE_QPSK)){
+      fprintf(stderr, "type is not supported\n");
       return 1;
     }
     fprintf(stderr,"Using DVB card \"%s\"\n",fe_info.name);
-    if( (fe_freq = atoi(channel)) == 0){
-      fprintf(stderr, "fe_freq is not number\n");
-      return 1;
-    }
     prop[0].cmd = DTV_FREQUENCY;
-    prop[0].u.data = (fe_freq * 6000 + 395143) * 1000;
+    if(fe_info.type == FE_OFDM){
+        if( (fe_freq = atoi(channel)) == 0){
+          fprintf(stderr, "channel is not number\n");
+          return 1;
+        }
+        prop[0].u.data = (fe_freq * 6000 + 395143) * 1000;
+        fprintf(stderr,"tuning to %d kHz\n",prop[0].u.data / 1000);
+    } else {    /* FE_QPSK */
+        if( ((channel[0]=='b')||(channel[0]=='B')) && ((channel[1]=='s')||(channel[1]=='S')) ){
+          if( (fe_freq = atoi(channel+2)) == 0){
+            fprintf(stderr, "channel is not BSnn\n\tnn=numeric\n");
+            return 1;
+          }
+          prop[0].u.data = fe_freq * 19180 + 1030300;
+        } else if( ((channel[0]=='n')||(channel[0]=='N')) && ((channel[1]=='d')||(channel[1]=='D')) ){
+          if( (fe_freq = atoi(channel+2)) == 0){
+            fprintf(stderr, "channel is not NDnn\n\tnn=numeric\n");
+            return 1;
+          }
+          prop[0].u.data = fe_freq * 20000 + 1573000;
+        } else {
+          fprintf(stderr, "channel is invalid\n");
+          return 1;
+        }
+        fprintf(stderr,"tuning to %d MHz\n",prop[0].u.data / 1000);
+    }
 #ifdef DTV_STREAM_ID
     prop[1].cmd = DTV_STREAM_ID;
 #else
     prop[1].cmd = DTV_ISDBS_TS_ID;
 #endif
-    prop[1].u.data = 0;
+    prop[1].u.data = tsid;
     prop[2].cmd = DTV_TUNE;
-    fprintf(stderr,"tuning to %d kHz\n",prop[0].u.data / 1000);
 
     props.props = prop;
     props.num = 3;
