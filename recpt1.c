@@ -112,8 +112,8 @@ void set_lch(char *lch, char **ppch, char **sid, unsigned int *tsid)
 		if (preset_ch[i].lch == ch) break;
 	if (i < NUM_PRESET_CH ) {
 		*ppch = preset_ch[i].channel;
-		if (*tsid == 0) *tsid = preset_ch[i].tsid;
-		if (*sid == NULL) *sid = lch;
+		/*if (*tsid == 0)*/ *tsid = preset_ch[i].tsid;
+		/*if (*sid == NULL)*/ *sid = lch;
 	}
 }
 
